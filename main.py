@@ -7,12 +7,15 @@ import sys
 import random
 import matplotlib.pyplot as plt
 
-N_GOALS = 5
+N_GOALS = 3
 HP = 3
-ACTIONS = ['right', 'up', 'left', 'down',
-            'strike_right', 'strike_up', 'strike_left', 'strike_down']
+ACTIONS = {
+    'emissary': ['right', 'up', 'left', 'down'],
+    'killer': ['right', 'up', 'left', 'down',
+               'strike_right', 'strike_up', 'strike_left', 'strike_down']
+}
 
-def fast_train(Q, layout, agent, goals, max_epochs=100000, show_stats=False):
+def fast_train(Q, mode, layout, agent, goals, max_epochs=100000, show_stats=False):
     ''' Gotta go fast '''
     iters = []
     epochs = []
@@ -20,7 +23,7 @@ def fast_train(Q, layout, agent, goals, max_epochs=100000, show_stats=False):
     epoch = 0
     while epoch < max_epochs:
         iter += 1
-        Agent.update(Q, layout, agent, goals, epoch)
+        Agent.update(Q, mode, layout, agent, goals, epoch)
         for goal in goals:
             if goal.hp == 0:
                 goal.pos = layout.random_position()
@@ -43,15 +46,19 @@ def fast_train(Q, layout, agent, goals, max_epochs=100000, show_stats=False):
 
 def main():
     fast_train_max_epochs = 100000
+    mode = 'killer'
     if len(sys.argv) > 1:
-        fast_train_max_epochs = int(sys.argv[1])
-    
-    layout = Layout(25, 19)
-    layout.generate(scarcity=0.9)
+        mode = sys.argv[1]
+    if len(sys.argv) > 2:
+        fast_train_max_epochs = int(sys.argv[2])
     
     # this is just to let the screen show the last action before reset
     reset_pending = False
     reset_counter = 0
+    
+    # layout
+    layout = Layout(21, 21)
+    layout.generate(scarcity=0.95)
     
     # create agent and goals
     agent = Agent(layout.random_position(), layout.step, layout.step, (0,255,200))
@@ -64,8 +71,8 @@ def main():
         goals.append(goal)
         
     # fast training
-    Q = QLearning(ACTIONS)
-    epoch = fast_train(Q, layout, agent, goals, max_epochs=fast_train_max_epochs, show_stats=False)
+    Q = QLearning(ACTIONS[mode])
+    epoch = fast_train(Q, mode, layout, agent, goals, max_epochs=fast_train_max_epochs, show_stats=False)
     
     # display result
     screen = Screen(layout, fps=8)
@@ -97,7 +104,7 @@ def main():
                 reset_counter = 0
                 reset_pending = False
         else:
-            reset, strike, x_strike, y_strike = Agent.update(Q, layout, agent, goals, epoch)
+            reset, strike, x_strike, y_strike = Agent.update(Q, mode, layout, agent, goals, epoch)
             if strike:
                 screen.draw_strike((x_strike, y_strike))
             if reset:

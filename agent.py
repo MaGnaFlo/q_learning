@@ -51,50 +51,68 @@ class Agent:
                 goal.pos = [x,y]
 
     @staticmethod
-    def update(Q, layout, agent, goals, epoch):
+    def update(Q, mode, layout, agent, goals, epoch):
         ''' Updates the agents' positions and Q '''
         # use the closest goal
         goal = min([goal for goal in goals if goal.hp > 0], key=lambda g: abs(agent.pos[0] - g.pos[0]) + abs(agent.pos[1] - g.pos[1]))
         state = QLearning.get_state(layout, agent.pos, goal.pos)
         action = Q.choose_action(state)
         
-        strike = False
-        x_strike, y_strike = agent.pos
-        reset = False
-        if action.startswith('strike_'):
-            strike = True
-            if action == 'strike_right':
-                x_strike += layout.step
-            elif action == 'strike_left':
-                x_strike -= layout.step
-            elif action == 'strike_up':
-                y_strike -= layout.step
-            elif action == 'strike_down':
-                y_strike += layout.step
-            
-            if [x_strike, y_strike] == goal.pos:
-                goal.hp -= 1
-                if goal.hp == 0:
-                    reward = 10.0
+        if mode == 'killer':
+            strike = False
+            x_strike, y_strike = agent.pos
+            reset = False
+            if mode == 'killer' and action.startswith('strike_'):
+                strike = True
+                if action == 'strike_right':
+                    x_strike += layout.step
+                elif action == 'strike_left':
+                    x_strike -= layout.step
+                elif action == 'strike_up':
+                    y_strike -= layout.step
+                elif action == 'strike_down':
+                    y_strike += layout.step
+                
+                if [x_strike, y_strike] == goal.pos:
+                    goal.hp -= 1
+                    if goal.hp == 0:
+                        reward = 10.0
+                    else:
+                        reward = 7.0
+                    reset = True
                 else:
-                    reward = 7.0
-                reset = True
+                    reward = -5
             else:
-                reward = -5
-        else:
+                new_pos = Agent.move(layout, agent.pos, action)
+                agent.pos = new_pos
+            
+                if (abs(new_pos[0] - goal.pos[0]) + abs(new_pos[1] - goal.pos[1])) // layout.step == 1:
+                    reward = 1
+                else:
+                    reward = -0.01
+                    
+            new_state = QLearning.get_state(layout, agent.pos, goal.pos)
+            if epoch > 10:
+                Agent.move_goals(layout, goals)
+            Q.update(state, action, reward, new_state)
+            return reset, strike, x_strike, y_strike
+        
+        elif mode == 'emissary':
             new_pos = Agent.move(layout, agent.pos, action)
             agent.pos = new_pos
             reset = False
-        
-            if (abs(new_pos[0] - goal.pos[0]) + abs(new_pos[1] - goal.pos[1])) // layout.step <= 1:
+            
+            if (abs(new_pos[0] - goal.pos[0]) + abs(new_pos[1] - goal.pos[1])) // layout.step == 1:
+                goal.hp -= 1
                 reward = 1
+                reset = True
             else:
                 reward = -0.01
             
-        new_state = QLearning.get_state(layout, agent.pos, goal.pos)
+            new_state = QLearning.get_state(layout, agent.pos, goal.pos)
+            if epoch > 10:
+                Agent.move_goals(layout, goals)
+            Q.update(state, action, reward, new_state)
+            return reset, False, -1, -1
+            
         
-        if epoch > 10:
-            Agent.move_goals(layout, goals)
-        
-        Q.update(state, action, reward, new_state)
-        return reset, strike, x_strike, y_strike

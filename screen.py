@@ -12,6 +12,11 @@ class Screen:
         pygame.display.set_caption("Q-learning")
         self.layout = layout
     
+    def set_layout(self, layout):
+        self.surface = pygame.display.set_mode((layout.step * layout.width, 
+                                                layout.step * layout.height))
+        self.layout = layout
+        
     def draw_background(self):
         self.surface.fill((0,0,0))
 
