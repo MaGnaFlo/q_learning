@@ -68,13 +68,20 @@ class Layout:
         elif axis == 'y':
             return max(0, min(val, self.height-1))
 
-    def local_view(self, pos, radius=3):
+    def local_view(self, pos, n=3):
         ''' Returns a state representation of the position's surroundings '''
         ax, ay = pos
-        view = (self.grid[self.crop(ay-radius//2, 'y')]    [self.crop(ax-radius//2, 'x'):self.crop(ax+radius//2+1, 'x')],
-                self.grid[self.crop(ay, 'y')]              [self.crop(ax-radius//2, 'x'):self.crop(ax+radius//2+1, 'x')],
-                self.grid[self.crop(ay+radius//2, 'y')]    [self.crop(ax-radius//2, 'x'):self.crop(ax+radius//2+1, 'x')]
-        )
+        view = ""
+        for i in range(-(n//2), n//2+1):
+            row = []
+            x = ax + i
+            for j in range(-(n//2), n//2+1):
+                y = ay + j
+                if 0 <= x < self.width and 0 <= y < self.height:
+                    row.append(self.grid[y][x])
+                else:
+                    row.append('#')
+            view += "".join(row)
         return "".join(view)
 
     def passable(self, pos):

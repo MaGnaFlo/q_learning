@@ -6,16 +6,20 @@ import numpy as np
 import sys
 import random
 import matplotlib.pyplot as plt
+from learning_logic import DQNAgent
 
 W, H = 19, 19
-N_GOALS = 1
-HP = 1
+N_GOALS = 3
+HP = 2
 ACTIONS = {
     'emissary': ['right', 'up', 'left', 'down'],
     'killer': ['right', 'up', 'left', 'down',
                'strike_right', 'strike_up', 'strike_left', 'strike_down']
 }
-LAYOUT_SCARCITY = 1
+LAYOUT_SCARCITY = 0.9
+LOCAL_VIEW_SIZE = 5
+
+USE_DEEP = True
 
 def fast_train(Q, mode, max_epochs=100000, show_stats=False):
     ''' Gotta go fast '''
@@ -62,6 +66,48 @@ def fast_train(Q, mode, max_epochs=100000, show_stats=False):
     
     return epoch
 
+def fast_train_deep(dqn_agent, mode, max_epochs=100000, show_stats=False):
+    ''' Gotta go fast '''
+    iters = []
+    epochs = []
+    iter = 0
+    epoch = 0
+    layout, agent, goals = set_game()
+    
+    while epoch < max_epochs:
+        if iter > 10000:
+            iter = 0
+            print(layout)
+            layout, agent, goals = set_game()
+            continue
+        
+        iter += 1
+        Agent.update_deep(dqn_agent, ACTIONS[mode], mode, layout, agent, goals, epoch, local_view_size=LOCAL_VIEW_SIZE)
+        all_dead = True
+        for goal in goals:
+            if goal.hp == 0:
+                # print(f"EPOCH {epoch} ok after {iter} iterations")
+                pass
+            else:
+                all_dead = False
+                
+        # if all dead, reset the game
+        if all_dead:
+            if epoch > 0 and epoch % 1 == 0:
+                print(f"epoch: {epoch} | mean iters: {int(np.mean(iters[:-100]))} iterations")
+            layout, agent, goals = set_game()
+            epoch += 1
+            iter = 0
+            
+        epochs.append(epoch)
+        iters.append(iter)
+    
+    if show_stats:
+        plt.scatter(epochs[::1000], iters[::1000], s=1)
+        plt.show()
+    
+    return epoch
+
 def set_game():
     # layout
     layout = Layout(W, H)
@@ -93,11 +139,14 @@ def main():
     reset_counter = 0
 
     # fast training
-    Q = QLearning(ACTIONS[mode], epsilon=0.05)
-    epoch = fast_train(Q, mode, max_epochs=fast_train_max_epochs, show_stats=True)
+    if USE_DEEP:
+        dqn_agent = DQNAgent(state_size=LOCAL_VIEW_SIZE**2+2, action_size=len(ACTIONS[mode]), device='cpu')
+        epoch = fast_train_deep(dqn_agent, mode, max_epochs=fast_train_max_epochs, show_stats=True)
+    else:
+        Q = QLearning(ACTIONS[mode], epsilon=0.05)
+        epoch = fast_train(Q, mode, max_epochs=fast_train_max_epochs, show_stats=True)
     
     # display result
-    Q.epsilon = 0.05
     layout, agent, goals = set_game()
     screen = Screen(layout, fps=8)
     loop = True
@@ -121,7 +170,6 @@ def main():
                 all_dead = True
                 for goal in goals:
                     if goal.hp == 0:
-                        print(f"EPOCH {epoch} ok after {iter} iterations")
                         epoch += 1
                         iter = 0
                     else:
@@ -135,7 +183,13 @@ def main():
                 reset_counter = 0
                 reset_pending = False
         else:
-            reset, strike, x_strike, y_strike = Agent.update(Q, mode, layout, agent, goals, epoch, training=False)
+            if USE_DEEP:
+                reset, strike, x_strike, y_strike = Agent.update_deep(dqn_agent, ACTIONS[mode], mode, layout, agent, goals, epoch, 
+                                                                  local_view_size=LOCAL_VIEW_SIZE, training=False)
+            else:
+                reset, strike, x_strike, y_strike = Agent.update(Q, mode, layout, agent, goals, epoch, 
+                                                                 local_view_size=LOCAL_VIEW_SIZE, training=False)
+            
             if strike:
                 screen.draw_strike((x_strike, y_strike))
             if reset:
