@@ -13,7 +13,7 @@ class QLearning:
     def get_state(layout, pos, goal_pos):
         dx = (goal_pos[0] - pos[0]) // layout.step
         dy = (goal_pos[1] - pos[1]) // layout.step
-        return (layout.local_view((pos[0]//layout.step,pos[1]//layout.step), 7), dx, dy)
+        return (layout.local_view((pos[0]//layout.step,pos[1]//layout.step), 5), dx, dy)
 
     def choose_action(self, state):
         if state not in self.Q:
@@ -29,3 +29,4 @@ class QLearning:
             self.Q[next_state] = {action: 0.0 for action in self.actions}
         max_future = max(self.Q[next_state].values())
         self.Q[state][action] += self.alpha * (reward + self.gamma * max_future - self.Q[state][action])
+

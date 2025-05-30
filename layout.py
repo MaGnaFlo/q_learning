@@ -7,6 +7,9 @@ class Layout:
         self.height = height
         self.grid = []
         self.step = step
+    
+    def __repr__(self):
+        return "\n".join("".join(row) for row in self.grid)
 
     def generate(self, scarcity=0.5):
         ''' Generates a random map as a connected graph
