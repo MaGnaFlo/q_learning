@@ -8,7 +8,7 @@ import random
 import matplotlib.pyplot as plt
 from learning_logic import DQNAgent
 
-W, H = 19, 19
+W, H = 20, 15
 N_GOALS = 3
 HP = 2
 ACTIONS = {
@@ -16,8 +16,8 @@ ACTIONS = {
     'killer': ['right', 'up', 'left', 'down',
                'strike_right', 'strike_up', 'strike_left', 'strike_down']
 }
-LAYOUT_SCARCITY = 0.9
-LOCAL_VIEW_SIZE = 5
+WALL_DENSITY = 0.25
+LOCAL_VIEW_SIZE = 7
 
 USE_DEEP = True
 
@@ -111,7 +111,7 @@ def fast_train_deep(dqn_agent, mode, max_epochs=100000, show_stats=False):
 def set_game():
     # layout
     layout = Layout(W, H)
-    layout.generate(scarcity=LAYOUT_SCARCITY)
+    layout.generate(d=WALL_DENSITY)
     
     # create agent and goals
     agent = Agent(layout.random_position(), layout.step, layout.step, (0,255,200))

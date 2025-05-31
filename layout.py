@@ -10,63 +10,25 @@ class Layout:
     
     def __repr__(self):
         return "\n".join("".join(row) for row in self.grid)
-
-    def generate(self, scarcity=0.5):
-        ''' Generates a random map as a connected graph
-        The scarcity parameters allows to statistically carve additional holes
-        :param self
-        :param scarcity: percentage of the total surface to statistically remove
-        '''
-        # Ensure dimensions are odd for the maze generation algorithm.
-        if self.width % 2 == 0:
-            self.width -= 1
-        if self.height % 2 == 0:
-            self.height -= 1
-
-        # Create a grid filled with walls.
-        maze = [['#' for _ in range(self.width)] for _ in range(self.height)]
+    
+    def generate(self, d=0.5):
+        self.grid = [['#' for _ in range(self.width)] for _ in range(self.height)]
         
-        # Randomly choose a starting cell (should be at odd indices).
-        start_x = random.randrange(1, self.width, 2)
-        start_y = random.randrange(1, self.height, 2)
-        maze[start_y][start_x] = '.'
-
-        # Use a stack for the recursive backtracking.
-        stack = [(start_x, start_y)]
+        x, y = random.randint(1, self.width-2), random.randint(1, self.height-1)
         
-        while stack:
-            x, y = stack[-1]
-            neighbors = []
-            # Check neighbors two cells away (up, down, left, right).
-            for dx, dy in [(0, 2), (2, 0), (0, -2), (-2, 0)]:
-                nx, ny = x + dx, y + dy
-                # Check that neighbor is inside bounds and is still a wall.
-                if 0 <= nx < self.width and 0 <= ny < self.height and maze[ny][nx] == '#':
-                    neighbors.append((nx, ny, dx, dy))
-            if neighbors:
-                # Choose a random valid neighbor.
-                nx, ny, dx, dy = random.choice(neighbors)
-                # Carve a passage between the current cell and the neighbor.
-                maze[y + dy // 2][x + dx // 2] = '.'
-                maze[ny][nx] = '.'
-                stack.append((nx, ny))
-            else:
-                stack.pop()
-        
-        for _ in range(int(self.width * self.height * scarcity)):
-            x = random.randrange(1, self.width - 1)
-            y = random.randrange(1, self.height - 1)
-            if maze[y][x] == '#':
-                maze[y][x] = '.'
-        
-        # Return the maze as a list of strings.
-        self.grid = [''.join(row) for row in maze]
-
-    def crop(self, val, axis):
-        if axis == 'x':
-            return max(0, min(val, self.width-1))
-        elif axis == 'y':
-            return max(0, min(val, self.height-1))
+        n = (self.width-2)*(self.height-2)
+        n_current = n
+        while n_current > int(d * n):
+            r = random.randint(0,3)
+            x += 1 if r == 0 else -1 if r == 1 else 0
+            y += 1 if r == 2 else -1 if r == 3 else 0
+            
+            x = max(1, min(self.width - 2, x))
+            y = max(1, min(self.height - 2, y))
+            
+            if self.grid[y][x] == '#':
+                self.grid[y][x] = '.'
+                n_current -= 1
 
     def local_view(self, pos, n=3):
         ''' Returns a state representation of the position's surroundings '''
@@ -96,6 +58,6 @@ class Layout:
         return [x,y]
 
 if __name__ == '__main__':
-    layout = Layout(19,15)
-    layout.generate(200)
-    [print(row) for row in layout.grid]
+    layout = Layout(9,9)
+    layout.generate2(d=0.5)
+    print(layout)
