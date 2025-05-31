@@ -68,7 +68,7 @@ class DQNAgent:
         self.device = device
         
         self.gamma = 0.99
-        self.epsilon = 0.1
+        self.epsilon = 0.2
         self.batch_size = 64
         self.lr = 1e-3
         
@@ -128,3 +128,6 @@ class DQNAgent:
         self.step_count += 1
         if self.step_count % self.update_target_steps == 0:
             self.target_net.load_state_dict(self.policy_net.state_dict())
+        
+    def save(self, path):
+        torch.save(self.policy_net.state_dict(), path)

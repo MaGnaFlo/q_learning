@@ -50,6 +50,12 @@ class Layout:
         x, y = pos
         return self.grid[y//self.step][x//self.step] != '#'
 
+    def to_grid(self, pos):
+        return [pos[0] // self.step, pos[1] // self.step]
+
+    def to_real(self, grid_pos):
+        return [grid_pos[0] * self.step, grid_pos[1] * self.step]
+
     def random_position(self):
         ok = False
         while not ok:

@@ -7,17 +7,18 @@ import sys
 import random
 import matplotlib.pyplot as plt
 from learning_logic import DQNAgent
+from astar import AStar
 
-W, H = 20, 15
-N_GOALS = 3
+W, H = 30, 30
+N_GOALS = 1
 HP = 2
 ACTIONS = {
-    'emissary': ['right', 'up', 'left', 'down'],
-    'killer': ['right', 'up', 'left', 'down',
+    'emissary': ['none', 'right', 'up', 'left', 'down'],
+    'killer': ['none', 'right', 'up', 'left', 'down', 'none'
                'strike_right', 'strike_up', 'strike_left', 'strike_down']
 }
-WALL_DENSITY = 0.25
-LOCAL_VIEW_SIZE = 7
+WALL_DENSITY = 0.5
+LOCAL_VIEW_SIZE = 5
 
 USE_DEEP = True
 
@@ -142,11 +143,14 @@ def main():
     if USE_DEEP:
         dqn_agent = DQNAgent(state_size=LOCAL_VIEW_SIZE**2+2, action_size=len(ACTIONS[mode]), device='cpu')
         epoch = fast_train_deep(dqn_agent, mode, max_epochs=fast_train_max_epochs, show_stats=True)
+        dqn_agent.save("test.pth")
     else:
         Q = QLearning(ACTIONS[mode], epsilon=0.05)
         epoch = fast_train(Q, mode, max_epochs=fast_train_max_epochs, show_stats=True)
     
+    
     # display result
+    dqn_agent.epsilon = 0.0
     layout, agent, goals = set_game()
     screen = Screen(layout, fps=8)
     loop = True
@@ -196,6 +200,41 @@ def main():
                 reset_pending = True
         
         screen.update()
+
+# ASTAR ####################################
+def test_astar():
+    layout, agent, goals = set_game()
+    screen = Screen(layout, fps=8)
+    loop = True
+    iter = 0
+    while loop:
+        Screen.register_events()
+        iter += 1
+        
+        screen.draw_background()
+        screen.draw_layout()
+        
+        Agent.move_goals(layout, goals)
+        
+        path = AStar.search(layout, agent.pos, goals[0].pos)
+        if len(path) > 1:
+            agent.pos = path[1]
+            if agent.pos == goals[0].pos:
+                layout, agent, goals = set_game()
+                screen = Screen(layout, fps=8)
+        else:
+            layout, agent, goals = set_game()
+            screen = Screen(layout, fps=8)
+            
+
+        # draw agents
+        for goal in goals:
+            if goal.hp > 0:
+                screen.draw_agent(goal.color, goal.pos)
+        screen.draw_agent(agent.color, agent.pos)
+        
+        screen.update()
         
 if __name__ == '__main__':
-    main()
+    # main()
+    test_astar()
