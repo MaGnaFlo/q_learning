@@ -3,8 +3,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
 import numpy as np
 from collections import deque
+from astar import AStar
+from game import Game
 
 class QLearning:
     ''' Class governing the Q-learning logic'''
@@ -131,3 +135,177 @@ class DQNAgent:
         
     def save(self, path):
         torch.save(self.policy_net.state_dict(), path)
+
+class ExpertDataset(Dataset):
+    ''' Responsible for storing pre-computed (state, action) values for behavior cloning '''
+    def __init__(self, data):
+        self.data = data
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        state, action = self.data[idx]
+        return torch.FloatTensor(state), torch.LongTensor([action])
+
+class AStarDQN:
+    def __init__(self, input_dim, num_actions, game: Game):
+        self.model = DQN(input_dim, num_actions)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+        self.criterion = nn.CrossEntropyLoss()
+        self.game = game
+
+    def run_expert(self, n_epochs=1000):
+        max_iters = 1000
+        dataset = []
+        for epoch in range(n_epochs):
+            self.game.generate()
+
+            for _ in range(max_iters):
+                path = AStar.search(self.game.layout, self.game.agent.pos, self.game.goals[0].pos)
+                if len(path) > 1:
+                    if path[1] == self.game.goals[0].pos:
+                        x, y = path[1]
+                        xa, ya = self.game.agent.pos
+                        xg, yg = self.game.goals[0].pos
+                        
+                        # gather the state
+                        view = self.game.layout.local_view((xa//self.game.step, ya//self.game.step),
+                                                            self.game.local_view_range)
+                        view_flat = np.array(view).flatten()
+                        view_flat = [int(x == '.') for x in view_flat[0]]
+                        goal_dx = (xg - xa) / self.game.width
+                        goal_dy = (yg - ya) / self.game.height
+                        
+                        # find the action
+                        if xa - x < 0:
+                            action = 0
+                        elif xa - x > 0:
+                            action = 2
+                        elif ya - y < 0:
+                            action = 3
+                        else:
+                            action = 1
+                        
+                        dataset.append((np.concatenate((view_flat, [goal_dx, goal_dy])), action))
+                        
+                        self.game.generate()
+                        print("AStar running: epoch", epoch)
+                        
+                    self.game.agent.pos = path[1]
+                    
+                else:
+                    self.game.generate()
+                    break
+                self.game.move_goals()
+
+        self.dataset = ExpertDataset(dataset)
+    
+    def train_from_expert(self, n_epochs):
+        loader = DataLoader(self.dataset, batch_size=32, shuffle=True)
+        for epoch in range(n_epochs):
+            for state, action in loader:
+                logits = self.model(state)
+                loss = self.criterion(logits, action.squeeze())
+                
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+                
+            print(f"Epoch {epoch}, Loss: {loss.item():.8f}")
+    
+    def update(self, dqn_agent, mode, epoch, training=True):
+        agent = self.game.agent
+        goals = self.game.goals
+        actions = self.game.actions
+        layout = self.game.layout
+        
+        # use the closest goal
+        goal = min([goal for goal in goals if goal.hp > 0], key=lambda g: (agent.pos[0] - g.pos[0])**2 + (agent.pos[1] - g.pos[1])**2)
+        state = DQNAgent.get_state(layout, agent.pos, goal.pos, local_view_size=self.game.local_view_range)
+        action_id = dqn_agent.get_action(state)
+        action = actions[action_id]
+
+        if mode == 'killer':
+            strike = False
+            x_strike, y_strike = agent.pos
+            reset = False
+            
+            reward = 0
+            done = False
+                
+            if  action.startswith('strike_'):
+                strike = True
+                if action == 'strike_right':
+                    x_strike += layout.step
+                elif action == 'strike_left':
+                    x_strike -= layout.step
+                elif action == 'strike_up':
+                    y_strike -= layout.step
+                elif action == 'strike_down':
+                    y_strike += layout.step
+                
+                if [x_strike, y_strike] == goal.pos:
+                    goal.hp -= 1
+                    if goal.hp == 0:
+                        reward = 10.0
+                    else:
+                        reward = 7.0
+                    reset = True
+                else:
+                    reward = -5
+            else:
+                new_pos = self.game.move_agent(layout, agent.pos, action)
+                agent.pos = new_pos
+            
+                if (abs(new_pos[0] - goal.pos[0]) + abs(new_pos[1] - goal.pos[1])) // layout.step == 1:
+                    reward = 1
+                else:
+                    reward = -0.01
+                    
+            self.game.move_goals(layout, goals)
+            next_state = DQNAgent.get_state(layout, agent.pos, goal.pos, local_view_size=self.game.local_view_range)
+            
+            if training:
+                dqn_agent.replay_buffer.push(state, action_id, reward, next_state, done)
+                dqn_agent.update()
+                
+            return reset, strike, x_strike, y_strike
+        
+    def train(self, mode, n_epochs):
+        self.dqn_agent = DQNAgent(state_size=self.game.local_view_range**2+2, 
+                             action_size=len(self.game.actions), device='cpu')
+        self.dqn_agent.policy_net.load_state_dict(self.model.state_dict())
+        self.dqn_agent.target_net.load_state_dict(self.model.state_dict())
+        
+        iter = 0
+        iters = []
+        epoch = 0
+        self.game.generate()
+        
+        while epoch < n_epochs:
+            if iter > 10000:
+                iter = 0
+                print(self.game.layout)
+                self.game.generate()
+                continue
+            
+            iter += 1
+            self.update(self.dqn_agent, mode, epoch, training=True)
+            all_dead = True
+            for goal in self.game.goals:
+                if goal.hp == 0:
+                    # print(f"EPOCH {epoch} ok after {iter} iterations")
+                    pass
+                else:
+                    all_dead = False
+                    
+            # if all dead, reset the game
+            if all_dead:
+                if epoch > 0 and epoch % 1 == 0:
+                    print(f"epoch: {epoch} | mean iters: {int(np.mean(iters[:-100]))} iterations")
+                self.game.generate()
+                epoch += 1
+                iter = 0
+        
+        

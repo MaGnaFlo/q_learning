@@ -1,23 +1,24 @@
 from learning_logic import QLearning
 from layout import Layout
 from agent import Agent
+from game import Game
 from screen import Screen
 import numpy as np
 import sys
 import random
 import matplotlib.pyplot as plt
-from learning_logic import DQNAgent
+from learning_logic import DQNAgent, AStarDQN
 from astar import AStar
 
-W, H = 30, 30
+W, H = 9, 9
 N_GOALS = 1
 HP = 2
 ACTIONS = {
-    'emissary': ['none', 'right', 'up', 'left', 'down'],
+    'emissary': ['right', 'up', 'left', 'down'],
     'killer': ['none', 'right', 'up', 'left', 'down', 'none'
                'strike_right', 'strike_up', 'strike_left', 'strike_down']
 }
-WALL_DENSITY = 0.5
+WALL_DENSITY = 0.2
 LOCAL_VIEW_SIZE = 5
 
 USE_DEEP = True
@@ -234,7 +235,16 @@ def test_astar():
         screen.draw_agent(agent.color, agent.pos)
         
         screen.update()
+
+def test_astar_dqn():
+    game = Game(W, H, WALL_DENSITY, 32, 5, 1, 2, ACTIONS['emissary'])
+    dqn = AStarDQN(27, 4, game)
+    dqn.run_expert(n_epochs=100)
+    
+    # dqn.train_from_expert(n_epochs=100)
+    # dqn.train('emissary', n_epochs=1000)
         
 if __name__ == '__main__':
     # main()
-    test_astar()
+    # test_astar()
+    test_astar_dqn()
